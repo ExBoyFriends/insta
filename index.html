@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cylinder 3D</title>
+    <title>Cylinder 3D - Random Stop</title>
     <style>
         body {
             margin: 0;
-            /* 背景画像の設定（ファイル名を確認してください） */
+            /* 背景画像：ファイル名はご自身のものに合わせてください */
             background-image: url('background.webp'); 
             background-size: cover;
             background-position: center;
@@ -30,8 +30,8 @@
             position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
             transform-style: preserve-3d;
-            /* 奥の画像を暗くするためのフィルタをここに適用 */
-            transition: filter 0.1s linear;
+            /* 明るさの変化を滑らかにする */
+            transition: filter 0.05s linear;
         }
         .card-img {
             position: absolute; top: 0; left: 0;
@@ -56,6 +56,9 @@
 
     let angle = 0.0, mode = 2, currentSpeed = 0.5, dragSpeed = 0.0;
     let isTouching = false, startTime = null, targetAngle = null;
+    
+    // ランダムな停止時間を生成 (15秒〜25秒)
+    const randomAccelerationTime = 15000 + Math.random() * 10000;
 
     const root = document.getElementById('cylinder-root');
     const panels = [];
@@ -65,7 +68,6 @@
             const panel = document.createElement('div');
             panel.className = 'panel';
             
-            // 背面（ゼブラ）
             const zebra = document.createElement('img');
             zebra.src = backImage;
             zebra.className = 'card-img zebra';
@@ -96,16 +98,23 @@
 
         const now = Date.now();
         if (mode === 2) {
-            let target = (startTime) ? 0.5 + (Math.min(now - startTime, 20000) / 1000) : (isTouching ? 4.0 : 0.5);
-            if (startTime && (now - startTime >= 20000)) mode = 3;
+            let target = (startTime) ? 0.5 + (Math.min(now - startTime, randomAccelerationTime) / 1000) : (isTouching ? 4.0 : 0.5);
+            // ランダムな時間が経過したら減速モードへ
+            if (startTime && (now - startTime >= randomAccelerationTime)) mode = 3;
             currentSpeed += (target - currentSpeed) * 0.05;
         } else if (mode === 3) {
             currentSpeed *= 0.98;
-            if (currentSpeed < 1.2) { mode = 4; targetAngle = Math.round(angle / stepAngle) * stepAngle; }
+            if (currentSpeed < 1.2) { 
+                mode = 4; 
+                targetAngle = Math.round(angle / stepAngle) * stepAngle; 
+            }
         } else if (mode === 4) {
             let distance = targetAngle - angle;
             currentSpeed = (currentSpeed * 0.92) + distance * 0.04;
-            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { angle = targetAngle; mode = 5; }
+            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { 
+                angle = targetAngle; 
+                mode = 5; 
+            }
         }
         render();
         requestAnimationFrame(update);
@@ -114,26 +123,23 @@
     function render() {
         panels.forEach((p, i) => {
             const rad = (i * stepAngle + angle) * Math.PI / 180;
-            const z = Math.cos(rad); // 1.0(手前) 〜 -1.0(奥)
-            
+            const z = Math.cos(rad);
             const rawTurns = (rad * 180 / Math.PI + 100) / 360;
             const currentTurns = Math.floor(rawTurns);
+            
             let idxA = ((i - currentTurns) % 5 + 5) % 5;
             let idxB = ((i - (currentTurns + 1)) % 5 + 5) % 5;
             const progress = rawTurns - currentTurns;
             
-            // Flutterの計算式を再現
             const fadeValue = Math.min(Math.max((progress - 0.5) / 0.5, 0.0), 1.0);
             const frontOpacity = Math.min(Math.max((z * 8) + 0.5, 0.0), 1.0);
             
-            // ★ 明るさの計算: zが小さい(奥)ほど暗くなる (0.2 〜 1.0)
+            // 奥ほど暗くする計算 (zは -1.0(奥)〜1.0(手前))
             const brightness = Math.min(Math.max((z + 1.2) / 2.2, 0.2), 1.0);
 
-            // パネル全体のトランスフォームと明るさ（フィルタ）適用
             p.el.style.transform = `rotateY(${rad}rad) translateZ(${cylinderZ}px) rotateX(1deg)`;
-            p.el.style.filter = `brightness(${brightness})`;
+            p.el.style.filter = `brightness(${brightness})`; // パネル全体を暗くする
             
-            // 表面のみの透明度制御
             p.group.style.opacity = frontOpacity;
             
             const srcA = panelImages[idxA];
@@ -163,6 +169,7 @@
     window.addEventListener('touchend', end);
 
     setup();
+    // 10秒後に自動的にスタート
     setTimeout(() => { if (!startTime) startTime = Date.now(); }, 10000);
 </script>
 </body>
