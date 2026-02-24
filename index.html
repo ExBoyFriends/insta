@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cylinder 3D - Flat Files</title>
+    <title>Cylinder 3D - Fixed</title>
     <style>
-        body {
-            margin: 0; background: #000; overflow: hidden;
-            touch-action: none; font-family: sans-serif;
-        }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
         #container {
             width: 100vw; height: 100vh;
             display: flex; align-items: center; justify-content: center;
-            perspective: 2000px; 
+            /* 遠近感を安定させるため値を調整 */
+            perspective: 2500px; 
         }
         #cylinder-root {
             position: relative;
             transform-style: preserve-3d;
+            /* Flutterの縮尺と角度を再現 */
             transform: scale(0.6) rotateX(-22deg);
             width: 275px; height: 355px;
         }
@@ -29,97 +28,78 @@
             position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
             object-fit: fill; pointer-events: none;
+            /* 画像がない時に枠が見えるように（デバッグ用） */
+            background: #222; 
         }
         .zebra { transform: scaleX(-1); }
-        #page-indicator {
-            position: fixed; top: 30px; width: 100%; text-align: center;
-            color: white; font-size: 24px; font-weight: bold; z-index: 10;
-        }
     </style>
 </head>
 <body>
 
-<div id="page-indicator">Index: 0</div>
 <div id="container">
     <div id="cylinder-root"></div>
 </div>
 
 <script>
-    // --- 画像ファイル名（同じ階層にある想定） ---
+    // --- 画像ファイル名（大文字小文字がファイルと完全に一致しているか確認してください） ---
     const panelImages = [
-        '2queen_b.webp', 
-        '2king_b.webp', 
-        '2jack_b.webp', 
-        '2joker1_b.webp', 
-        '2joker2_b.webp'
+        '2queen_b.webp', '2king_b.webp', '2jack_b.webp', '2joker1_b.webp', '2joker2_b.webp'
     ];
     const backImage = '2zebra_b.webp';
 
     const totalPanelCount = 6;
     const stepAngle = 360 / totalPanelCount;
-    const cylinderZ = 300;
+    const cylinderZ = 350; // Z位置を微調整
 
     let angle = 0.0;
     let mode = 2; 
     let currentSpeed = 0.5;
     let dragSpeed = 0.0;
-    let isTouching = false, isLongPressing = false;
-    let startTime = null, targetAngle = null;
-    let lastReportedSeat = -1, totalStepCount = 0, currentIndex = 0;
+    let isTouching = false;
+    let startTime = null;
 
     const root = document.getElementById('cylinder-root');
-    const indicator = document.getElementById('page-indicator');
-
-    // パネルと画像要素の初期生成（innerHTMLを使わず要素を保持）
     const panels = [];
-    for (let i = 0; i < totalPanelCount; i++) {
-        const panel = document.createElement('div');
-        panel.className = 'panel';
-        
-        const zebra = document.createElement('img');
-        zebra.src = backImage;
-        zebra.className = 'card-img zebra';
-        
-        const frontGroup = document.createElement('div');
-        frontGroup.style.cssText = 'position:absolute; width:100%; height:100%;';
-        
-        const imgA = document.createElement('img');
-        imgA.className = 'card-img';
-        const imgB = document.createElement('img');
-        imgB.className = 'card-img';
-        
-        frontGroup.appendChild(imgA);
-        frontGroup.appendChild(imgB);
-        panel.appendChild(zebra);
-        panel.appendChild(frontGroup);
-        root.appendChild(panel);
-        
-        panels.push({ el: panel, group: frontGroup, imgA, imgB });
+
+    // 要素の生成
+    function setup() {
+        for (let i = 0; i < totalPanelCount; i++) {
+            const panel = document.createElement('div');
+            panel.className = 'panel';
+            
+            const zebra = document.createElement('img');
+            zebra.src = './' + backImage; // 同一階層を明示
+            zebra.className = 'card-img zebra';
+            zebra.onerror = () => console.error(backImage + " が見つかりません");
+            
+            const frontGroup = document.createElement('div');
+            frontGroup.style.cssText = 'position:absolute; width:100%; height:100%; transform-style:preserve-3d;';
+            
+            const imgA = document.createElement('img');
+            imgA.className = 'card-img';
+            const imgB = document.createElement('img');
+            imgB.className = 'card-img';
+            
+            frontGroup.appendChild(imgA);
+            frontGroup.appendChild(imgB);
+            panel.appendChild(zebra);
+            panel.appendChild(frontGroup);
+            root.appendChild(panel);
+            
+            panels.push({ el: panel, group: frontGroup, imgA, imgB });
+        }
+        update();
     }
 
     function update() {
         if (mode === 5) return;
-
         dragSpeed *= 0.95;
         angle += (currentSpeed + dragSpeed);
 
-        // インデックス計算
-        const currentSeat = Math.round(angle / stepAngle);
-        if (lastReportedSeat !== currentSeat) {
-            let diff = currentSeat - lastReportedSeat;
-            totalStepCount = (lastReportedSeat === -1) ? currentSeat : totalStepCount + diff;
-            lastReportedSeat = currentSeat;
-            let visualIndex = ((totalStepCount % 5) + 5) % 5;
-            if (currentIndex !== visualIndex) {
-                currentIndex = visualIndex;
-                indicator.innerText = `Index: ${currentIndex}`;
-            }
-        }
-
         const now = Date.now();
-        // 物理演算ロジック
+        // 加速ロジック
         if (mode === 2) {
-            let target = (startTime) ? 0.5 + (Math.min(now - startTime, 20000) / 1000) : (isLongPressing || isTouching ? 4.0 : 0.5);
+            let target = (startTime) ? 0.5 + (Math.min(now - startTime, 20000) / 1000) : (isTouching ? 4.0 : 0.5);
             if (startTime && (now - startTime >= 20000)) mode = 3;
             currentSpeed += (target - currentSpeed) * 0.05;
         } else if (mode === 3) {
@@ -133,7 +113,7 @@
             currentSpeed = (currentSpeed * 0.92) + distance * 0.04;
             if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) {
                 angle = targetAngle; mode = 5;
-                setTimeout(() => { alert("Chapter 2.5 へ移動"); }, 5000);
+                console.log("Finish");
             }
         }
 
@@ -155,17 +135,41 @@
             const frontOpacity = Math.min(Math.max((z * 8) + 0.5, 0.0), 1.0);
             const brightness = Math.min(Math.max((z + 1.2) / 2.2, 0.2), 1.0);
 
+            // CSS Transformの適用
             p.el.style.transform = `rotateY(${rad}rad) translateZ(${cylinderZ}px) rotateX(1deg)`;
             p.group.style.opacity = frontOpacity;
             p.group.style.filter = `brightness(${brightness})`;
             
-            // 画像ソースの更新とフェード
-            if (p.imgA.getAttribute('data-idx') != idxA) {
-                p.imgA.src = panelImages[idxA];
-                p.imgA.setAttribute('data-idx', idxA);
-            }
-            if (p.imgB.getAttribute('data-idx') != idxB) {
-                p.imgB.src = panelImages[idxB];
-                p.imgB.setAttribute('data-idx', idxB);
-            }
-            p.imgA.style.opacity = 1 - fadeValue
+            if (p.imgA.src.indexOf(panelImages[idxA]) === -1) p.imgA.src = './' + panelImages[idxA];
+            if (p.imgB.src.indexOf(panelImages[idxB]) === -1) p.imgB.src = './' + panelImages[idxB];
+            
+            p.imgA.style.opacity = 1 - fadeValue;
+            p.imgB.style.opacity = fadeValue;
+        });
+    }
+
+    // イベント
+    let lastX = 0;
+    const start = (e) => { isTouching = true; lastX = e.clientX || (e.touches ? e.touches[0].clientX : 0); };
+    const move = (e) => { 
+        if(!isTouching) return;
+        const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        angle += (x - lastX) * 0.4; dragSpeed = (x - lastX) * 0.4; lastX = x;
+    };
+    const end = () => { isTouching = false; };
+
+    window.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchstart', start, {passive: false});
+    window.addEventListener('touchmove', move, {passive: false});
+    window.addEventListener('touchend', end);
+
+    // 全ての準備が整ってから開始
+    window.onload = () => {
+        setup();
+        setTimeout(() => { if (!startTime) startTime = Date.now(); }, 10000);
+    };
+</script>
+</body>
+</html>
