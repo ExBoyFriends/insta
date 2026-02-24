@@ -131,4 +131,39 @@
 
             // パネル全体のトランスフォームと明るさ（フィルタ）適用
             p.el.style.transform = `rotateY(${rad}rad) translateZ(${cylinderZ}px) rotateX(1deg)`;
-            p.el.style.filter = `brightness(${brightness
+            p.el.style.filter = `brightness(${brightness})`;
+            
+            // 表面のみの透明度制御
+            p.group.style.opacity = frontOpacity;
+            
+            const srcA = panelImages[idxA];
+            const srcB = panelImages[idxB];
+            if (!p.imgA.src.endsWith(srcA)) p.imgA.src = srcA;
+            if (!p.imgB.src.endsWith(srcB)) p.imgB.src = srcB;
+            
+            p.imgA.style.opacity = 1 - fadeValue;
+            p.imgB.style.opacity = fadeValue;
+        });
+    }
+
+    let lastX = 0;
+    const start = (e) => { isTouching = true; lastX = e.clientX || (e.touches ? e.touches[0].clientX : 0); };
+    const move = (e) => { 
+        if(!isTouching) return;
+        const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        angle += (x - lastX) * 0.4; dragSpeed = (x - lastX) * 0.4; lastX = x;
+    };
+    const end = () => isTouching = false;
+
+    window.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchstart', start);
+    window.addEventListener('touchmove', move);
+    window.addEventListener('touchend', end);
+
+    setup();
+    setTimeout(() => { if (!startTime) startTime = Date.now(); }, 10000);
+</script>
+</body>
+</html>
