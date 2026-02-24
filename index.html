@@ -7,49 +7,38 @@
     <style>
         body {
             margin: 0;
-            /* 背景画像の設定 */
-            background-image: url('background.webp'); /* ← ここを背景ファイル名に変えてください */
+            /* 背景画像の設定（ファイル名を確認してください） */
+            background-image: url('background.webp'); 
             background-size: cover;
             background-position: center;
-            background-color: #000; /* 画像がない時の予備色 */
+            background-color: #000;
             overflow: hidden;
             touch-action: none;
         }
         #container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 100vw; height: 100vh;
+            display: flex; align-items: center; justify-content: center;
             perspective: 2000px; 
         }
         #cylinder-root {
             position: relative;
             transform-style: preserve-3d;
             transform: scale(0.6) rotateX(-22deg);
-            width: 275px;
-            height: 355px;
+            width: 275px; height: 355px;
         }
         .panel {
-            position: absolute;
-            top: 0; left: 0;
+            position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
             transform-style: preserve-3d;
+            /* 奥の画像を暗くするためのフィルタをここに適用 */
+            transition: filter 0.1s linear;
         }
         .card-img {
-            position: absolute;
-            top: 0; left: 0;
+            position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
-            object-fit: fill;
-            pointer-events: none;
+            object-fit: fill; pointer-events: none;
         }
-        .zebra {
-            transform: scaleX(-1);
-        }
-        /* 文字（インジケーター）は非表示にしました */
-        #page-indicator {
-            display: none;
-        }
+        .zebra { transform: scaleX(-1); }
     </style>
 </head>
 <body>
@@ -67,7 +56,6 @@
 
     let angle = 0.0, mode = 2, currentSpeed = 0.5, dragSpeed = 0.0;
     let isTouching = false, startTime = null, targetAngle = null;
-    let lastReportedSeat = -1, totalStepCount = 0;
 
     const root = document.getElementById('cylinder-root');
     const panels = [];
@@ -77,6 +65,7 @@
             const panel = document.createElement('div');
             panel.className = 'panel';
             
+            // 背面（ゼブラ）
             const zebra = document.createElement('img');
             zebra.src = backImage;
             zebra.className = 'card-img zebra';
@@ -112,18 +101,11 @@
             currentSpeed += (target - currentSpeed) * 0.05;
         } else if (mode === 3) {
             currentSpeed *= 0.98;
-            if (currentSpeed < 1.2) { 
-                mode = 4; 
-                targetAngle = Math.round(angle / stepAngle) * stepAngle; 
-            }
+            if (currentSpeed < 1.2) { mode = 4; targetAngle = Math.round(angle / stepAngle) * stepAngle; }
         } else if (mode === 4) {
             let distance = targetAngle - angle;
             currentSpeed = (currentSpeed * 0.92) + distance * 0.04;
-            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { 
-                angle = targetAngle; 
-                mode = 5; 
-                // 終了後の処理があればここに書く
-            }
+            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { angle = targetAngle; mode = 5; }
         }
         render();
         requestAnimationFrame(update);
@@ -132,49 +114,21 @@
     function render() {
         panels.forEach((p, i) => {
             const rad = (i * stepAngle + angle) * Math.PI / 180;
-            const z = Math.cos(rad);
+            const z = Math.cos(rad); // 1.0(手前) 〜 -1.0(奥)
+            
             const rawTurns = (rad * 180 / Math.PI + 100) / 360;
             const currentTurns = Math.floor(rawTurns);
-            
             let idxA = ((i - currentTurns) % 5 + 5) % 5;
             let idxB = ((i - (currentTurns + 1)) % 5 + 5) % 5;
             const progress = rawTurns - currentTurns;
+            
+            // Flutterの計算式を再現
             const fadeValue = Math.min(Math.max((progress - 0.5) / 0.5, 0.0), 1.0);
             const frontOpacity = Math.min(Math.max((z * 8) + 0.5, 0.0), 1.0);
+            
+            // ★ 明るさの計算: zが小さい(奥)ほど暗くなる (0.2 〜 1.0)
             const brightness = Math.min(Math.max((z + 1.2) / 2.2, 0.2), 1.0);
 
+            // パネル全体のトランスフォームと明るさ（フィルタ）適用
             p.el.style.transform = `rotateY(${rad}rad) translateZ(${cylinderZ}px) rotateX(1deg)`;
-            p.group.style.opacity = frontOpacity;
-            p.group.style.filter = `brightness(${brightness})`;
-            
-            const srcA = panelImages[idxA];
-            const srcB = panelImages[idxB];
-            if (!p.imgA.src.endsWith(srcA)) p.imgA.src = srcA;
-            if (!p.imgB.src.endsWith(srcB)) p.imgB.src = srcB;
-            
-            p.imgA.style.opacity = 1 - fadeValue;
-            p.imgB.style.opacity = fadeValue;
-        });
-    }
-
-    let lastX = 0;
-    const start = (e) => { isTouching = true; lastX = e.clientX || (e.touches ? e.touches[0].clientX : 0); };
-    const move = (e) => { 
-        if(!isTouching) return;
-        const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
-        angle += (x - lastX) * 0.4; dragSpeed = (x - lastX) * 0.4; lastX = x;
-    };
-    const end = () => isTouching = false;
-
-    window.addEventListener('mousedown', start);
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', end);
-    window.addEventListener('touchstart', start);
-    window.addEventListener('touchmove', move);
-    window.addEventListener('touchend', end);
-
-    setup();
-    setTimeout(() => { if (!startTime) startTime = Date.now(); }, 10000);
-</script>
-</body>
-</html>
+            p.el.style.filter = `brightness(${brightness
