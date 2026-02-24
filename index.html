@@ -3,44 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cylinder 3D - Debug Mode</title>
+    <title>Cylinder 3D</title>
     <style>
-        body { margin: 0; background: #111; overflow: hidden; touch-action: none; color: white; }
+        body {
+            margin: 0;
+            /* 背景画像の設定 */
+            background-image: url('background.webp'); /* ← ここを背景ファイル名に変えてください */
+            background-size: cover;
+            background-position: center;
+            background-color: #000; /* 画像がない時の予備色 */
+            overflow: hidden;
+            touch-action: none;
+        }
         #container {
-            width: 100vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             perspective: 2000px; 
         }
         #cylinder-root {
             position: relative;
             transform-style: preserve-3d;
             transform: scale(0.6) rotateX(-22deg);
-            width: 275px; height: 355px;
-            /* 中央位置を視覚化 */
-            border: 1px dashed #444; 
+            width: 275px;
+            height: 355px;
         }
         .panel {
-            position: absolute; top: 0; left: 0;
+            position: absolute;
+            top: 0; left: 0;
             width: 100%; height: 100%;
             transform-style: preserve-3d;
-            background: #222; /* 画像がない時に板が見えるように */
-            border: 1px solid #333;
         }
         .card-img {
-            position: absolute; top: 0; left: 0;
+            position: absolute;
+            top: 0; left: 0;
             width: 100%; height: 100%;
-            object-fit: fill; pointer-events: none;
+            object-fit: fill;
+            pointer-events: none;
         }
-        .zebra { transform: scaleX(-1); background: #333; }
+        .zebra {
+            transform: scaleX(-1);
+        }
+        /* 文字（インジケーター）は非表示にしました */
         #page-indicator {
-            position: fixed; top: 30px; width: 100%; text-align: center;
-            font-size: 24px; font-weight: bold; z-index: 10;
+            display: none;
         }
     </style>
 </head>
 <body>
 
-<div id="page-indicator">Index: 0 (Initializing...)</div>
 <div id="container">
     <div id="cylinder-root"></div>
 </div>
@@ -54,20 +67,18 @@
 
     let angle = 0.0, mode = 2, currentSpeed = 0.5, dragSpeed = 0.0;
     let isTouching = false, startTime = null, targetAngle = null;
-    let lastReportedSeat = -1, totalStepCount = 0, currentIndex = 0;
+    let lastReportedSeat = -1, totalStepCount = 0;
 
     const root = document.getElementById('cylinder-root');
-    const indicator = document.getElementById('page-indicator');
     const panels = [];
 
     function setup() {
-        console.log("Setting up panels...");
         for (let i = 0; i < totalPanelCount; i++) {
             const panel = document.createElement('div');
             panel.className = 'panel';
             
             const zebra = document.createElement('img');
-            zebra.src = backImage; // 裸のパス
+            zebra.src = backImage;
             zebra.className = 'card-img zebra';
             
             const frontGroup = document.createElement('div');
@@ -86,8 +97,7 @@
             
             panels.push({ el: panel, group: frontGroup, imgA, imgB });
         }
-        indicator.innerText = "Index: 0 (Running)";
-        update(); // ループ開始
+        update();
     }
 
     function update() {
@@ -95,20 +105,6 @@
         dragSpeed *= 0.95;
         angle += (currentSpeed + dragSpeed);
 
-        // インデックス計算
-        const currentSeat = Math.round(angle / stepAngle);
-        if (lastReportedSeat !== currentSeat) {
-            let diff = (lastReportedSeat === -1) ? 0 : currentSeat - lastReportedSeat;
-            totalStepCount += diff;
-            lastReportedSeat = currentSeat;
-            let visualIndex = ((totalStepCount % 5) + 5) % 5;
-            if (currentIndex !== visualIndex) {
-                currentIndex = visualIndex;
-                indicator.innerText = `Index: ${currentIndex}`;
-            }
-        }
-
-        // 加速ロジック
         const now = Date.now();
         if (mode === 2) {
             let target = (startTime) ? 0.5 + (Math.min(now - startTime, 20000) / 1000) : (isTouching ? 4.0 : 0.5);
@@ -116,13 +112,19 @@
             currentSpeed += (target - currentSpeed) * 0.05;
         } else if (mode === 3) {
             currentSpeed *= 0.98;
-            if (currentSpeed < 1.2) { mode = 4; targetAngle = Math.round(angle / stepAngle) * stepAngle; }
+            if (currentSpeed < 1.2) { 
+                mode = 4; 
+                targetAngle = Math.round(angle / stepAngle) * stepAngle; 
+            }
         } else if (mode === 4) {
             let distance = targetAngle - angle;
             currentSpeed = (currentSpeed * 0.92) + distance * 0.04;
-            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { angle = targetAngle; mode = 5; }
+            if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) { 
+                angle = targetAngle; 
+                mode = 5; 
+                // 終了後の処理があればここに書く
+            }
         }
-
         render();
         requestAnimationFrame(update);
     }
@@ -145,7 +147,6 @@
             p.group.style.opacity = frontOpacity;
             p.group.style.filter = `brightness(${brightness})`;
             
-            // srcの変更を最小限に
             const srcA = panelImages[idxA];
             const srcB = panelImages[idxB];
             if (!p.imgA.src.endsWith(srcA)) p.imgA.src = srcA;
@@ -156,29 +157,24 @@
         });
     }
 
-    // タッチ・ドラッグイベント
     let lastX = 0;
     const start = (e) => { isTouching = true; lastX = e.clientX || (e.touches ? e.touches[0].clientX : 0); };
     const move = (e) => { 
         if(!isTouching) return;
         const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
-        const dx = x - lastX;
-        angle += dx * 0.4; dragSpeed = dx * 0.4; lastX = x;
+        angle += (x - lastX) * 0.4; dragSpeed = (x - lastX) * 0.4; lastX = x;
     };
     const end = () => isTouching = false;
 
     window.addEventListener('mousedown', start);
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', end);
-    window.addEventListener('touchstart', start, {passive: false});
-    window.addEventListener('touchmove', move, {passive: false});
+    window.addEventListener('touchstart', start);
+    window.addEventListener('touchmove', move);
     window.addEventListener('touchend', end);
 
-    // 10秒待たずに即時実行準備
-    setup(); 
-    // 5秒後に自動加速開始（動作確認を早めるため）
-    setTimeout(() => { if (!startTime) startTime = Date.now(); }, 5000);
-
+    setup();
+    setTimeout(() => { if (!startTime) startTime = Date.now(); }, 10000);
 </script>
 </body>
 </html>
