@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Cylinder Widget - JS Port</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        #container {
+            width: 100vw; height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            perspective: 1000px; /* setEntry(3, 2, -0.0005) に相当 */
+        }
+        #cylinder-root {
+            position: relative;
+            transform-style: preserve-3d;
+            /* Flutterの ..scale(0.6) ..rotateX(-22deg) に相当 */
+            transform: scale(0.6) rotateX(-22deg);
+            width: 275px; height: 355px; /* baseWidthに応じた可変設定も可能 */
+        }
+        .panel {
+            position: absolute;
+            width: 100%; height: 100%;
+            backface-visibility: visible;
+            transform-style: preserve-3d;
+        }
+        .card-face {
+            position: absolute; width: 100%; height: 100%;
+            background-size: fill;
+        }
+        .zebra { transform: scaleX(-1); }
+        #page-indicator {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            color: white; font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="page-indicator">Index: 0</div>
+<div id="container">
+    <div id="cylinder-root"></div>
+</div>
+
+<script>
+/**
+ * 設定値
+ */
+const panelImages = [
+    'assets/2queen_b.webp', 'assets/2king_b.webp', 
+    'assets/2jack_b.webp', 'assets/2joker1_b.webp', 'assets/2joker2_b.webp'
+];
+const backImage = 'assets/2zebra_b.webp';
+const totalPanelCount = 6;
+const stepAngle = 360 / totalPanelCount;
+const cylinderZ = 300; // Flutterの cylinderZ 変数
+
+/**
+ * 状態管理 (State)
+ */
+let angle = 0.0;
+let mode = 2; // 2:初期/加速, 3:減速, 4:停止制御, 5:終了
+let currentSpeed = 0.5;
+let dragSpeed = 0.0;
+let isTouching = false;
+let isLongPressing = false;
+let startTime = null;
+let targetAngle = null;
+let lastReportedSeat = -1;
+let totalStepCount = 0;
+let currentIndex = 0;
+
+const root = document.getElementById('cylinder-root');
+const indicator = document.getElementById('page-indicator');
+
+// パネルの生成
+const panels = [];
+for (let i = 0; i < totalPanelCount; i++) {
+    const el = document.createElement('div');
+    el.className = 'panel';
+    root.appendChild(el);
+    panels.push(el);
+}
+
+/**
+ * メインループ (_updateに相当)
+ */
+function update() {
+    if (mode === 5) return;
+
+    // 摩擦
+    dragSpeed *= 0.95;
+    angle += (currentSpeed + dragSpeed);
+
+    // インデックス計算
+    const currentSeat = Math.round(angle / stepAngle);
+    if (lastReportedSeat !== currentSeat) {
+        let diff = currentSeat - lastReportedSeat;
+        if (lastReportedSeat !== -1) {
+            totalStepCount += diff;
+        } else {
+            totalStepCount = currentSeat;
+        }
+        lastReportedSeat = currentSeat;
+        
+        // visualIndex の計算
+        let visualIndex = totalStepCount % 5;
+        if (visualIndex < 0) visualIndex += 5;
+        if (currentIndex !== visualIndex) {
+            currentIndex = visualIndex;
+            indicator.innerText = `Index: ${currentIndex}`;
+        }
+    }
+
+    const now = Date.now();
+
+    // モード遷移ロジック
+    if (mode === 2) {
+        let target = 0.5;
+        if (startTime) {
+            const elapsed = now - startTime;
+            if (elapsed < 20000) {
+                target = 0.5 + (elapsed / 1000);
+            } else {
+                mode = 3;
+            }
+        } else if (isLongPressing || isTouching) {
+            target = 4.0;
+        }
+        currentSpeed += (target - currentSpeed) * 0.05;
+    } 
+    else if (mode === 3) {
+        currentSpeed *= 0.98;
+        if (currentSpeed < 1.2) {
+            mode = 4;
+            targetAngle = Math.round(angle / stepAngle) * stepAngle;
+        }
+    } 
+    else if (mode === 4) {
+        let distance = targetAngle - angle;
+        currentSpeed = (currentSpeed * 0.92) + distance * 0.04;
+
+        if (Math.abs(distance) < 0.01 && Math.abs(currentSpeed) < 0.01) {
+            angle = targetAngle;
+            mode = 5;
+            console.log("Finished!");
+            // Flutterの onFinished に相当する処理
+            setTimeout(() => { location.reload(); }, 5000); 
+        }
+    }
+
+    render();
+    requestAnimationFrame(update);
+}
+
+/**
+ * 描画 (_buildPanelに相当)
+ */
+function render() {
+    panels.forEach((panel, i) => {
+        const rad = (i * stepAngle + angle) * Math.PI / 180;
+        const z = Math.cos(rad);
+
+        // 画像のクロスフェード計算 (Flutterのロジック再現)
+        const rawTurns = (rad * 180 / Math.PI + 100) / 360;
+        const currentTurns = Math.floor(rawTurns);
+        
+        let currentIdx = (i - currentTurns) % 5;
+        if (currentIdx < 0) currentIdx += 5;
+        let nextIdx = (i - (currentTurns + 1)) % 5;
+        if (nextIdx < 0) nextIdx += 5;
+
+        const progress = rawTurns - currentTurns;
+        const fadeValue = Math.min(Math.max((progress - 0.5) / 0.5, 0.0), 1.0);
+        const frontOpacity = Math.min(Math.max((z * 8) + 0.5, 0.0), 1.0);
+        const brightness = Math.min(Math.max((z + 1.2) / 2.2, 0.2), 1.0);
+
+        // 3D変形
+        // rotateX(1deg) も再現
+        panel.style.transform = `rotateY(${rad}rad) translateZ(${cylinderZ}px) rotateX(1deg)`;
+        
+        // 背景(Zebra)と表面の画像を更新 (簡易化のため背景はCSS、表面は子要素)
+        panel.innerHTML = `
+            <div class="card-face zebra" style="background-image:url('${backImage}');"></div>
+            <div class="card-face" style="opacity: ${frontOpacity}; filter: brightness(${brightness});">
+                <div class="card-face" style="background-image:url('${panelImages[currentIdx]}'); opacity: ${1 - fadeValue};"></div>
+                <div class="card-face" style="background-image:url('${panelImages[nextIdx]}'); opacity: ${fadeValue};"></div>
+            </div>
+        `;
+    });
+}
+
+/**
+ * イベントハンドリング
+ */
+window.addEventListener('mousedown', () => { isTouching = true; });
+window.addEventListener('mouseup', (e) => { isTouching = false; });
+window.addEventListener('mousemove', (e) => {
+    if (isTouching && mode < 4) {
+        const dx = e.movementX;
+        angle += dx * 0.4;
+        dragSpeed = dx * 0.4;
+    }
+});
+
+// 自動開始タイマー
+setTimeout(() => {
+    if (mode === 2 && !startTime) {
+        startTime = Date.now();
+    }
+}, 10000);
+
+update();
+</script>
+</body>
+</html>
